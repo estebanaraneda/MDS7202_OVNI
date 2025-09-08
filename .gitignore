@@ -2,3 +2,4 @@
 *.PNG
 *.gif
 *.pickle
+*.parquet
