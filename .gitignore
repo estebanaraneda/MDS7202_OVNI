@@ -1,2 +1,14 @@
+# data types
 *.jpg
 *.PNG
+*.gif
+*.pickle
+*.parquet
+*.csv
+*.html
+*.pkl
+*.log
+
+# catboost folder
+catboost_info/
+
