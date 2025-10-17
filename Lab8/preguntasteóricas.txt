@@ -1,0 +1,12 @@
+Preguntas teoricas
+
+1) Una máquina virtual es un ambiente autocontenido lo que necesita aislamiento hasta el sistema operativo. Un contenedor en docker es más eficiente ya que comparte el sistema operativo, motor y recursos entre los contenedores.
+
+2) Al ocupar docker se puede controlar las dependencias y entornos. Esto permite uniformidad e independencia del sistema local ocupado.
+
+3) Se ocupa el archivo compose, esto permite el configurar e iniciar multiples contenedores. Como los contendeores no necesitan compartir o cambiar entorno, se obtiene consistencia.
+
+4) Se ocupa el comando "mount" con la dirección del directorio que se desea ocupar como volumen. Esto permite a cada contenedor compartir volumenes.
+
+5) Dockerfile es el archivo que contiene la información necesaria para crear una imagen.
+docker-compose es el archivo que tiene la información necesaria para orquestar arreglos multi-contenedor.
