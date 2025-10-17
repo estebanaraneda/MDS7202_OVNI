@@ -9,7 +9,6 @@ import uvicorn
 
 
 class WaterSample(BaseModel):
-    # Reemplaza estos campos con los nombres de tus columnas
     ph: float
     Hardness: float
     Solids: float
@@ -24,7 +23,7 @@ class WaterSample(BaseModel):
 # Cargar el modelo
 
 
-with open("models/best_model_pipeline_20251017_181200.pkl", "rb") as f:  # Reemplaza con el nombre correcto del archivo
+with open("models/best_model_pipeline_20251017_181200.pkl", "rb") as f:
     model = pickle.load(f)
 
 
@@ -42,6 +41,8 @@ app = FastAPI(
 
 @app.get("/")
 def home():
+    # Retornar información básica sobre la API
+    # Formato de input y output
     return {
         "message": "Modelo de clasificación de potabilidad de agua",
         "input": {
@@ -65,7 +66,7 @@ def home():
 @app.post("/potabilidad/")
 def predict_potability(sample: WaterSample):
     # Convertir el input a DataFrame
-    input_df = pd.DataFrame([sample.dict()])
+    input_df = pd.DataFrame([sample.model_dump()])
 
     # Hacer predicción
     pred = model.predict(input_df)[0]  # 0 o 1
