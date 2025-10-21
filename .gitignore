@@ -8,7 +8,10 @@
 *.html
 *.pkl
 *.log
+*.yaml
+*.model
 
 # catboost folder
 catboost_info/
+mlruns/
 
