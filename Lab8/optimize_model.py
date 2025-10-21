@@ -175,23 +175,6 @@ def optimize_model():
     mlflow.log_artifact(config_plot_path, artifact_path="plots")
     os.remove(config_plot_path)
 
-    # loguear librerías usadas
-    libraries = {
-        "pandas": pd.__version__,
-        "xgboost": xgb.__version__,
-        "optuna": optuna.__version__,
-        "mlflow": mlflow.__version__,
-        "shap": shap.__version__,
-        "matplotlib": matplotlib.__version__,
-        "sklearn": sklearn.__version__,
-        "pickle": pickle.format_version,
-    }
-    libraries_to_requirements = "\n".join([f"{lib}=={ver}" for lib, ver in libraries.items()])
-    with open("requirements.txt", "w") as f:
-        f.write(libraries_to_requirements)
-    mlflow.log_artifact("requirements.txt")
-    os.remove("requirements.txt")
-
     mlflow.end_run()
 
 

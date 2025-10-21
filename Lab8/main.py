@@ -23,7 +23,7 @@ class WaterSample(BaseModel):
 # Cargar el modelo
 
 
-with open("models/best_model_pipeline_20251017_181200.pkl", "rb") as f:
+with open("models/best_model_pipeline_20251020_213211.pkl", "rb") as f:
     model = pickle.load(f)
 
 
