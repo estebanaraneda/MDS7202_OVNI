@@ -22,3 +22,7 @@ project/informe/*
 # Pero permitir estos dos archivos
 !project/informe/main.tex
 !project/informe/rapportECL2024.cls
+
+# Pero permitir estos dos archivos
+!project/informe/main.tex
+!project/informe/rapportECL2024.cls
