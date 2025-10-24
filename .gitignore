@@ -10,8 +10,15 @@
 *.log
 *.yaml
 *.model
+*.json
 
 # catboost folder
 catboost_info/
 mlruns/
 
+# Ignorar todo el folder informe
+project/informe/*
+
+# Pero permitir estos dos archivos
+!project/informe/main.tex
+!project/informe/rapportECL2024.cls
