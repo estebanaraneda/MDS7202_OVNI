@@ -27,16 +27,17 @@ with DAG(
 ) as dag:
     # 1. Marcador de inicio del pipeline
     start_pipeline = EmptyOperator(task_id="start_pipeline")
+    execution_date = "{{ ds }}"
 
     # 2. Crear carpetas de ejecución
     create_folders_task = PythonOperator(task_id="create_folders", python_callable=create_folders, provide_context=True)
 
     #branching
     def choose_branch(**kwargs):
-        if datetime.now(timezone.utc) < datetime(2024,10,1):
-            return 'branch_a'
+        if execution_date < datetime(2024,11,1, tzinfo=timezone.utc):
+            return 'download_data_a'
         else:
-            return 'branch_b'
+            return 'download_data_b'
     
     branch_task = BranchPythonOperator(
     task_id='branch_task',
@@ -46,7 +47,6 @@ with DAG(
 
     # 3. Descargar dataset y guardarlo en carpeta 'raw'
     # Reemplaza test_url con la URL real cuando la tengas
-    execution_date = "{{ ds }}"
     download_data_a = BashOperator(
         task_id="download_data_a",
         bash_command=(
@@ -95,6 +95,7 @@ with DAG(
         >> create_folders_task 
         >> branch_task 
         >> [download_data_a, download_data_b]
+        >> merge_data_task
         >> split_data_task
         >> [rf_model_task, m2_model_task, m3_model_task]
         >> evaluate_model_task
