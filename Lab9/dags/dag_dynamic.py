@@ -4,10 +4,11 @@ from airflow.operators.bash import BashOperator
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.python_operator import BranchPythonOperator
 from datetime import datetime
-from sklearn.ensemble import RandomForestClassifier 
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
+from sklearn.gaussian_process import GaussianProcessClassifier
 from sklearn.gaussian_process.kernels import RBF
-
+from datetime import timezone
 
 
 # 🔹 Importar las funciones definidas en tu script anterior
@@ -32,18 +33,17 @@ with DAG(
     # 2. Crear carpetas de ejecución
     create_folders_task = PythonOperator(task_id="create_folders", python_callable=create_folders, provide_context=True)
 
-    #branching
+    # branching
     def choose_branch(**kwargs):
-        if execution_date < datetime(2024,11,1, tzinfo=timezone.utc):
-            return 'download_data_a'
+        execution_date_as_dt = datetime.strptime(kwargs["ds"], "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        if execution_date_as_dt < datetime(2024, 11, 1, tzinfo=timezone.utc):
+            return "download_data_a"
         else:
-            return 'download_data_b'
-    
+            return "download_data_b"
+
     branch_task = BranchPythonOperator(
-    task_id='branch_task',
-    python_callable=choose_branch,
-    provide_context=True,
-    dag=dag)
+        task_id="branch_task", python_callable=choose_branch, provide_context=True, dag=dag
+    )
 
     # 3. Descargar dataset y guardarlo en carpeta 'raw'
     # Reemplaza test_url con la URL real cuando la tengas
@@ -54,46 +54,50 @@ with DAG(
             "https://gitlab.com/eduardomoyab/laboratorio-13/-/raw/main/files/data_1.csv"
         ),
     )
-    
+
     download_data_b = BashOperator(
         task_id="download_data_b",
         bash_command=(
             f"curl -s -o $AIRFLOW_HOME/{execution_date}/raw/data_1.csv "
             "https://gitlab.com/eduardomoyab/laboratorio-13/-/raw/main/files/data_1.csv"
             f" && curl -s -o $AIRFLOW_HOME/{execution_date}/raw/data_2.csv "
-            "https://gitlab.com/eduardomoyab/laboratorio-13/-/raw/main/files/data_2.csv",
-    ))
-    
+            "https://gitlab.com/eduardomoyab/laboratorio-13/-/raw/main/files/data_2.csv"
+        ),
+    )
+
     # 4. Merge
-    merge_data_task = PythonOperator(task_id="merge_data", python_callable=load_ands_merge, trigger_rule='one_success', provide_context=True)
-    
+    merge_data_task = PythonOperator(
+        task_id="merge_data", python_callable=load_ands_merge, trigger_rule="one_success", provide_context=True
+    )
+
     # 5. Aplicar hold-out split
     split_data_task = PythonOperator(task_id="split_data", python_callable=split_data, provide_context=True)
 
-
-
     # 6.1 RF
+    rf_instance = RandomForestClassifier(random_state=42)
     rf_model_task = PythonOperator(
-        task_id="rf_model", python_callable=train_model, op_args=[RandomForestClassifier], provide_context=True
+        task_id="rf_model", python_callable=train_model, op_args=[rf_instance], provide_context=True
     )
-        # 6.2 modelo2
+    # 6.2 modelo2
+    m2_instance = SVC()
     m2_model_task = PythonOperator(
-        task_id="m2_model", python_callable=train_model, op_args=[SVC], provide_context=True
+        task_id="m2_model", python_callable=train_model, op_args=[m2_instance], provide_context=True
     )
-        #6.3 modelo3
+    # 6.3 modelo3
+    m3_instance = GaussianProcessClassifier(kernel=RBF())
     m3_model_task = PythonOperator(
-        task_id="m3_model", python_callable=train_model,op_args=[RBF], provide_context=True
+        task_id="m3_model", python_callable=train_model, op_args=[m3_instance], provide_context=True
     )
     # 7.
     evaluate_model_task = PythonOperator(
-        task_id="evaluate_model",python_callable=evaluate_models, provide_context=True , trigger_rule='none_failed'
+        task_id="evaluate_model", python_callable=evaluate_models, provide_context=True, trigger_rule="none_failed"
     )
 
     # Definir flujo lineal de tareas
     (
         start_pipeline
-        >> create_folders_task 
-        >> branch_task 
+        >> create_folders_task
+        >> branch_task
         >> [download_data_a, download_data_b]
         >> merge_data_task
         >> split_data_task
