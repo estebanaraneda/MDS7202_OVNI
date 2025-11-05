@@ -4,7 +4,6 @@ from airflow.operators.bash import BashOperator
 from airflow.operators.empty import EmptyOperator
 from datetime import datetime
 
-# 🔹 Importar las funciones definidas en tu script anterior
 # Asegúrate de reemplazar `pipeline_functions` por el nombre real del archivo .py donde están tus funciones
 from hiring_functions import create_folders, split_data, preprocess_and_train, gradio_interface
 

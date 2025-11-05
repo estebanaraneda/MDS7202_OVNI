@@ -11,7 +11,6 @@ from sklearn.gaussian_process.kernels import RBF
 from datetime import timezone
 
 
-# 🔹 Importar las funciones definidas en tu script anterior
 # Asegúrate de reemplazar `pipeline_functions` por el nombre real del archivo .py donde están tus funciones
 from hiring_dynamic_functions import create_folders, split_data, train_model, load_ands_merge, evaluate_models
 
