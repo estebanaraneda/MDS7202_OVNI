@@ -8,23 +8,39 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, f1_score
 import gradio as gr
+from constants import CATEGORICAL_VARIABLES, NUMERICAL_VARIABLES
+from sklearn.base import BaseEstimator, TransformerMixin
 
 # Archivo encargado de definir funciones ETL reutilizables para los DAGs de Airflow
 
 
-def extract_data():
+def create_folders(**kwargs):
     """
-    Por ahora lee los datos de una carperta 'data'.
+    Crea una carpeta con la fecha de ejecución (proveniente del DAG)
+    y tres subcarpetas: 'raw', 'splits' y 'models'.
 
+    Parameters:
+        **kwargs: Recibe los parámetros del contexto de Airflow.
+                  Usa 'ds' (date string, formato YYYY-MM-DD).
     """
-    data_folder = "data"
-    os.makedirs(data_folder, exist_ok=True)
+    # Obtener la fecha de ejecución desde Airflow (YYYY-MM-DD)
+    execution_date = kwargs.get("ds")
 
-    clients = pd.read_parquet(os.path.join(data_folder, "clientes.parquet"))
-    products = pd.read_parquet(os.path.join(data_folder, "productos.parquet"))
-    transactions = pd.read_parquet(os.path.join(data_folder, "transacciones.parquet"))
+    # Crear carpeta principal
+    base_folder = execution_date
+    os.makedirs(base_folder, exist_ok=True)
 
-    return clients, products, transactions
+    # Crear subcarpetas
+    subfolders = ["raw", "new_transactions", "preprocessed", "feature_extracted", "splits", "models"]
+    for sub in subfolders:
+        os.makedirs(os.path.join(base_folder, sub), exist_ok=True)
+
+    print(f"Carpetas creadas en: {os.path.abspath(base_folder)}")
+    return {
+        "raw_data_path": os.path.abspath(os.path.join(base_folder, "raw")),
+        "splits_path": os.path.abspath(os.path.join(base_folder, "splits")),
+        "models_path": os.path.abspath(os.path.join(base_folder, "models")),
+    }
 
 
 def extract_new_data():
@@ -39,11 +55,28 @@ def extract_new_data():
     return new_transactions
 
 
-def transform_data(clients, products, transactions, fast_debug=True):
+def transform_data(fast_debug=True, new_data_path=None, **kwargs):
     """
     Realiza las transformaciones necesarias en los datos para el modelo de recomendación.
 
     """
+    # Obtener fecha desde Airflow (si se pasa como contexto)
+    execution_date = kwargs.get("ds")
+
+    # Definir rutas de entrada y salida
+    base_folder = execution_date
+    client_path = os.path.join(base_folder, "raw", "clientes.parquet")
+    product_path = os.path.join(base_folder, "raw", "productos.parquet")
+    if new_data_path:
+        transaction_path = new_data_path
+    else:
+        transaction_path = os.path.join(base_folder, "raw", "transacciones.parquet")
+
+    # Lectura de datos
+    clients = pd.read_parquet(client_path)
+    products = pd.read_parquet(product_path)
+    transactions = pd.read_parquet(transaction_path)
+
     # Drop de duplicados
     clients = clients.drop_duplicates(keep="first")
     products = products.drop_duplicates(keep="first")
@@ -70,8 +103,6 @@ def transform_data(clients, products, transactions, fast_debug=True):
         col_type = main_df[col].dtype
         dtype_dict[col] = col_type
 
-    print(dtype_dict)
-
     if fast_debug:
         random_clients_ids = main_df["customer_id"].drop_duplicates().sample(n=5, random_state=42)
         main_df = main_df[main_df["customer_id"].isin(random_clients_ids)]
@@ -93,20 +124,13 @@ def transform_data(clients, products, transactions, fast_debug=True):
     # Tranformar customer_id y product_id a categóricas
     main_df["customer_id"] = main_df["customer_id"].astype("category")
     main_df["product_id"] = main_df["product_id"].astype("category")
-    return main_df
 
-
-def weekly_data_saver(df):
-    """
-    Guarda el dataframe transformado en la carpeta 'preprocessed' con el nombre 'weekly_data.csv'.
-    """
-    preprocessed_folder = "preprocessed"
+    # Guardado de datos transformados semanalmente
+    preprocessed_folder = os.path.join(base_folder, "preprocessed")
     os.makedirs(preprocessed_folder, exist_ok=True)
 
     output_path = os.path.join(preprocessed_folder, "weekly_data.parquet")
-    df.to_parquet(output_path, index=False)
-
-    print(f"Data semanal guardada en: {output_path}")
+    main_df.to_parquet(output_path, index=False)
 
 
 def reindex_customer_product(group, all_dates):
@@ -185,54 +209,69 @@ def dataframe_reindexer(df):
     return weekly_df
 
 
-def lagged_features_adder(df, lag_weeks=[1, 2, 3, 4]):
+def lagged_features(**kwargs):
     """
-    Agrega características rezagadas (lagged features) al dataframe.
-    Crea columnas con el número de órdenes en semanas anteriores.
+    Agrega características rezagadas (lagged features) a los datos preprocesados.
     """
+    # Obtener fecha desde Airflow (si se pasa como contexto)
+    execution_date = kwargs.get("ds")
+
+    # Definir rutas de entrada y salida
+    base_folder = execution_date
+    preprocessed_folder = os.path.join(base_folder, "preprocessed")
+    feature_extracted_folder = os.path.join(base_folder, "feature_extracted")
+    os.makedirs(feature_extracted_folder, exist_ok=True)
+
+    # Leer el dataset preprocesado
+    df = pd.read_parquet(os.path.join(preprocessed_folder, "weekly_data.parquet"))
     df = df.sort_values(by=["customer_id", "product_id", "purchase_date"])
 
+    # Definir los lags a crear
+    lag_weeks = [1, 2, 3, 4]
     for lag in lag_weeks:
-        df[f"num_orders_lag_{lag}"] = df.groupby(["customer_id", "product_id"])["num_orders"].shift(lag)
-        df[f"items_lag_{lag}"] = df.groupby(["customer_id", "product_id"])["items"].shift(lag)
+        df[f"num_orders_lag_{lag}"] = df.groupby(["customer_id", "product_id"])["num_orders"].shift(lag).copy()
+        df[f"items_lag_{lag}"] = df.groupby(["customer_id", "product_id"])["items"].shift(lag).copy()
 
-    return df
+    # Eliminar columnas sin lags, ya que son data leaks
+    df = df.drop(columns=["num_orders", "items"])
+
+    # Guardado de datos con lags
+    output_path = os.path.join(feature_extracted_folder, "weekly_data_with_lags.parquet")
+    df.to_parquet(output_path, index=False)
 
 
 def split_data(**kwargs):
     """
-    Lee 'datos semanalmente preprocesados' desde la carpeta 'preprocessed',
+    Lee 'datos semanalmente preprocesados' desde la carpeta 'feature_extracted',
     realiza hold-out split (80/20) y guarda los datasets resultantes en 'splits'.
     Parameters:
         **kwargs: permite obtener la fecha de ejecución desde Airflow (ds)
     """
     # Definir rutas de entrada y salida
-    preprocessed_folder = "preprocessed"
-    splits_folder = "splits"
+    execution_date = kwargs.get("ds")
+    base_folder = execution_date
+    feature_extracted_folder = os.path.join(base_folder, "feature_extracted")
+    splits_folder = os.path.join(base_folder, "splits")
     os.makedirs(splits_folder, exist_ok=True)
+
     # Leer el dataset preprocesado
-    data_path = os.path.join(preprocessed_folder, "weekly_data.parquet")
-    df = pd.read_parquet(data_path)
+    df = pd.read_parquet(os.path.join(feature_extracted_folder, "weekly_data_with_lags.parquet"))
+
     # Starting date
     initial_date = df["purchase_date"].min()
     final_date = df["purchase_date"].max()
+
     # Definir fecha de corte para hold-out split (60/20/20)
     cutoff_date = initial_date + (final_date - initial_date) * 0.6
     test_cutoff_date = cutoff_date + (final_date - initial_date) * 0.2
+
     # Dividir los datos
     train_df = df[df["purchase_date"] <= cutoff_date]
     val_df = df[(df["purchase_date"] > cutoff_date) & (df["purchase_date"] <= test_cutoff_date)]
     test_df = df[df["purchase_date"] > test_cutoff_date]
+
     # Guardar los splits
     train_df.to_parquet(os.path.join(splits_folder, "train.parquet"), index=False)
     val_df.to_parquet(os.path.join(splits_folder, "val.parquet"), index=False)
     test_df.to_parquet(os.path.join(splits_folder, "test.parquet"), index=False)
     print(f"Conjuntos guardados en: {os.path.abspath(splits_folder)}")
-
-
-# Zona de testing
-if __name__ == "__main__":
-    # Prueba de las funciones ETL
-    clients, products, transactions = extract_data(ds="2024-06-01")
-    main_df = transform_data(clients, products, transactions, fast_debug=True)
-    print(main_df.head())
