@@ -5,6 +5,7 @@ from airflow.operators.bash import BashOperator
 from airflow.operators.empty import EmptyOperator
 from datetime import datetime
 from etl_functions import create_folders, transform_data, split_data, lagged_features
+from model_pipeline import optimize_model
 
 # Definición del DAG
 with DAG(
@@ -46,4 +47,7 @@ with DAG(
     # 6. Crear splits de entrenamiento, validación y prueba
     create_splits = PythonOperator(task_id="create_splits", python_callable=split_data, provide_context=True)
 
-    # 7. Model
+    # 7. Model optimization
+    model_optimization = PythonOperator(
+        task_id="model_optimization", python_callable=optimize_model, provide_context=True
+    )

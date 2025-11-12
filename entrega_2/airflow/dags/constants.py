@@ -16,14 +16,14 @@ NUMERICAL_VARIABLES = [
     "Y",
     "X",
     "size",
-    "payment_lagged_1",
-    "payment_lagged_2",
-    "payment_lagged_3",
-    "payment_lagged_4",
-    "num_orders_lagged_1",
-    "num_orders_lagged_2",
-    "num_orders_lagged_3",
-    "num_orders_lagged_4",
+    "items_lag_1",
+    "items_lag_2",
+    "items_lag_3",
+    "items_lag_4",
+    "num_orders_lag_1",
+    "num_orders_lag_2",
+    "num_orders_lag_3",
+    "num_orders_lag_4",
 ]
 
 TEMPORAL_VARIABLES = [
