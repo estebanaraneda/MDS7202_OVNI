@@ -5,7 +5,7 @@ from airflow.operators.bash import BashOperator
 from airflow.operators.empty import EmptyOperator
 from datetime import datetime
 from etl_functions import create_folders, transform_data, split_data, lagged_features
-from model_pipeline import optimize_model
+from airflow.dags.model_functions import optimize_model
 
 # Definición del DAG
 with DAG(
