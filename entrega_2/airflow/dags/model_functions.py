@@ -9,6 +9,9 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from xgboost import XGBClassifier
 import optuna
 from joblib import dump, load
+import mlflow
+import shap
+import matplotlib.pyplot as plt
 
 
 class OutlierClipper(BaseEstimator, TransformerMixin):
@@ -123,6 +126,8 @@ def objective(trial):
         steps=[("date_transformer", date_transformer), ("preprocessor", preprocessor), ("model", classifier_obj)]
     )
 
+    # Inicio de una nueva corrida en MLflow
+    mlflow.start_run(nested=True, run_name=f"trial_{trial.number}")
     # Entrenamos el modelo
     model_to_optimize.fit(X_train, y_train)
     # Realizamos las predicciones
@@ -131,6 +136,18 @@ def objective(trial):
     recall = (y_opt_val_pred[y_val == 1] == 1).mean()
     # Guardamos el mejor pipeline entrenado
     trial.set_user_attr("best_pipeline", model_to_optimize)
+
+    # Logueo de parámetros y métricas en MLflow
+    mlflow.log_params(trial.params)
+    mlflow.log_metric("valid_recall", recall)
+
+    # Guardado del modelo en MLflow
+    signature = mlflow.models.infer_signature(X_train, model_to_optimize.predict(X_train))
+    mlflow.sklearn.log_model(model_to_optimize, "model", signature=signature, input_example=X_train.iloc[:5])
+
+    # Finalización de la corrida en MLflow
+    mlflow.end_run()
+
     return recall
 
 
@@ -143,28 +160,94 @@ def optimize_model(**kwargs):
     execution_date = kwargs.get("ds")
     X_train, y_train, X_val, y_val, X_test, y_test = split_reading_data(execution_date)
 
+    # # # Inicio bloque MLflow # # #
+
+    nombre_experimento = f"XGBoost_Optuna_study_{execution_date}"
+    mlflow.set_experiment(nombre_experimento)
+    mlflow.start_run(run_name="XGBoost_Optuna_Study_Global")
+
+    # # # Fin bloque MLflow # # #
+
     study = optuna.create_study(direction="maximize")
-    study.optimize(objective, n_trials=50)
+    study.optimize(objective, n_trials=5)
 
-    print("Número de ensayos realizados:", len(study.trials))
-    print("Mejor valor de recall en validación:", study.best_value)
-    print("Mejores hiperparámetros:", study.best_params)
+    # print("Número de ensayos realizados:", len(study.trials))
+    # print("Mejor valor de recall en validación:", study.best_value)
+    # print("Mejores hiperparámetros:", study.best_params)
 
-    # Obtener el mejor pipeline entrenado
-    best_pipeline = study.best_trial.user_attrs["best_pipeline"]
+    # # Obtener el mejor pipeline entrenado
+    # best_pipeline = study.best_trial.user_attrs["best_pipeline"]
 
-    # Evaluar en el conjunto de prueba
-    y_test_pred = best_pipeline.predict(X_test)
-    test_recall = (y_test_pred[y_test == 1] == 1).mean()
-    print("Recall en conjunto de prueba:", test_recall)
+    # # Evaluar en el conjunto de prueba
+    # y_test_pred = best_pipeline.predict(X_test)
+    # test_recall = (y_test_pred[y_test == 1] == 1).mean()
+    # print("Recall en conjunto de prueba:", test_recall)
 
-    # Guardar el mejor pipeline entrenado
-    base_folder = execution_date
-    models_folder = os.path.join(base_folder, "models")
-    os.makedirs(models_folder, exist_ok=True)
-    model_path = os.path.join(models_folder, "best_pipeline.joblib")
+    # # Guardar el mejor pipeline entrenado
+    # base_folder = execution_date
+    # models_folder = os.path.join(base_folder, "models")
+    # os.makedirs(models_folder, exist_ok=True)
+    # model_path = os.path.join(models_folder, "best_pipeline.joblib")
 
-    dump(best_pipeline, model_path)
+    # dump(best_pipeline, model_path)
+
+    # # # Inicio bloque MLflow # # #
+
+    # Logueo de los mejores hiperparámetros en MLflow
+    best_params = study.best_trial.params
+    mlflow.log_params(best_params)
+
+    # Guardado de gráficos de Optuna
+    # Crea folder plots si no existe
+    optuna.visualization.plot_optimization_history(study).write_image("optimization_history.png")
+    mlflow.log_artifact("optimization_history.png", artifact_path="plots")
+    # delete local file
+    os.remove("optimization_history.png")
+
+    optuna.visualization.plot_param_importances(study).write_image("param_importances.png")
+    mlflow.log_artifact("param_importances.png", artifact_path="plots")
+    # delete local file
+    os.remove("param_importances.png")
+
+    # Get best model from mlflow
+    best_model_pipeline = get_best_model(mlflow.get_experiment_by_name(nombre_experimento).experiment_id)
+
+    # Entrenamiento con los datos de entrenamiento completos
+    y_val_pred = best_model_pipeline.predict(X_val)
+    valid_recall = (y_val_pred[y_val == 1] == 1).mean()
+    mlflow.log_metric("valid_recall", valid_recall)
+
+    # Pickle save best model to models folder in mlruns
+    os.makedirs("models", exist_ok=True)
+    model_name = f"best_model_pipeline_{execution_date}.pkl"
+    with open(f"models/{model_name}", "wb") as f:
+        dump(best_model_pipeline, f)
+
+    # Importancia de características con SHAP barras summary plot
+    explainer = shap.TreeExplainer(best_model_pipeline["model"])
+    X_train_date_transformed = best_model_pipeline["date_transformer"].transform(X_train)
+    X_train_preprocessed = best_model_pipeline["preprocessor"].transform(X_train_date_transformed)
+    shap_values = explainer(X_train_preprocessed)
+    shap.summary_plot(
+        shap_values,
+        features=X_train_preprocessed,
+        feature_names=X_train_preprocessed.columns,
+        plot_type="bar",
+        show=False,
+    )
+    plt.savefig("shap_summary.png")
+    mlflow.log_artifact("shap_summary.png", artifact_path="plots")
+    # delete local file
+    os.remove("shap_summary.png")
+
+
+def get_best_model(experiment_id):
+    # Buscar la mejor corrida en MLflow basada en la métrica de validación
+    runs = mlflow.search_runs(experiment_id)
+    best_model_id = runs.sort_values("metrics.valid_recall", ascending=False)["run_id"].iloc[0]
+    best_model = mlflow.sklearn.load_model("runs:/" + best_model_id + "/model")
+
+    return best_model
 
 
 def model_predictor(**kwargs):
@@ -177,14 +260,21 @@ def model_predictor(**kwargs):
     # Definir rutas
     base_folder = execution_date
     feature_extracted_folder = os.path.join(base_folder, "feature_extracted")
-    models_folder = os.path.join(base_folder, "models")
+    models_folder = "models"
     predictions_folder = os.path.join(base_folder, "predictions")
 
     # Leer dataset de la semana siguiente con lags
     next_week_df = pd.read_parquet(os.path.join(feature_extracted_folder, "next_week_data.parquet"))
 
-    # Cargar el modelo entrenado
-    model_path = os.path.join(models_folder, "best_pipeline.joblib")
+    # Obtener lista de mejores modelos guardados
+    model_files = [f for f in os.listdir(models_folder) if f.startswith("best_model_pipeline_") and f.endswith(".pkl")]
+    execution_dates = [f[len("best_model_pipeline_") : -len(".pkl")] for f in model_files]
+    execution_dates = [date for date in execution_dates if date <= execution_date]
+
+    # Seleccionamos el último mejor modelo basado en la fecha de ejecución
+    latest_date = max(execution_dates)
+
+    model_path = os.path.join(models_folder, f"best_model_pipeline_{latest_date}.pkl")
     trained_pipeline = load(model_path)
 
     # Realizar predicciones
