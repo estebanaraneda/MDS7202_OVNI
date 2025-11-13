@@ -1,15 +1,5 @@
 import os
 import pandas as pd
-from sklearn.model_selection import train_test_split
-import joblib
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, f1_score
-import gradio as gr
-from constants import CATEGORICAL_VARIABLES, NUMERICAL_VARIABLES
-from sklearn.base import BaseEstimator, TransformerMixin
 
 # Archivo encargado de definir funciones ETL reutilizables para los DAGs de Airflow
 
@@ -31,7 +21,7 @@ def create_folders(**kwargs):
     os.makedirs(base_folder, exist_ok=True)
 
     # Crear subcarpetas
-    subfolders = ["raw", "new_transactions", "preprocessed", "feature_extracted", "splits", "models"]
+    subfolders = ["raw", "preprocessed", "feature_extracted", "splits", "models", "predictions"]
     for sub in subfolders:
         os.makedirs(os.path.join(base_folder, sub), exist_ok=True)
 
@@ -43,19 +33,7 @@ def create_folders(**kwargs):
     }
 
 
-def extract_new_data():
-    """
-    Lee nuevos datos de transacciones desde la carpeta 'new_data'.
-    """
-    data_folder = "new_data"
-    os.makedirs(data_folder, exist_ok=True)
-
-    new_transactions = pd.read_parquet(os.path.join(data_folder, "new_transacciones.parquet"))
-
-    return new_transactions
-
-
-def transform_data(fast_debug=True, new_data_path=None, **kwargs):
+def transform_data(fast_debug=True, only_last_week=False, last_week_path=None, **kwargs):
     """
     Realiza las transformaciones necesarias en los datos para el modelo de recomendación.
 
@@ -67,8 +45,9 @@ def transform_data(fast_debug=True, new_data_path=None, **kwargs):
     base_folder = execution_date
     client_path = os.path.join(base_folder, "raw", "clientes.parquet")
     product_path = os.path.join(base_folder, "raw", "productos.parquet")
-    if new_data_path:
-        transaction_path = new_data_path
+
+    if only_last_week:
+        transaction_path = os.path.join(base_folder, "raw", "new_transactions.parquet")
     else:
         transaction_path = os.path.join(base_folder, "raw", "transacciones.parquet")
 
@@ -125,12 +104,25 @@ def transform_data(fast_debug=True, new_data_path=None, **kwargs):
     main_df["customer_id"] = main_df["customer_id"].astype("category")
     main_df["product_id"] = main_df["product_id"].astype("category")
 
+    print(f"last_week_path: {last_week_path}")
+    # Merge con datos de la semana pasada si es necesario
+    if only_last_week and last_week_path is not None:
+        last_week_df = pd.read_parquet(last_week_path)
+        main_df = pd.concat([last_week_df, main_df], ignore_index=True)
+        main_df = main_df.drop_duplicates(keep="last", subset=["customer_id", "product_id", "purchase_date"])
+
     # Guardado de datos transformados semanalmente
     preprocessed_folder = os.path.join(base_folder, "preprocessed")
     os.makedirs(preprocessed_folder, exist_ok=True)
 
     output_path = os.path.join(preprocessed_folder, "weekly_data.parquet")
     main_df.to_parquet(output_path, index=False)
+
+    # Print de confirmación
+    print(f"Datos preprocesados guardados en: {os.path.abspath(output_path)}")
+    print(f"Dimensiones del dataset preprocesado: {main_df.shape}")
+    print(f"Columnas del dataset preprocesado: {main_df.columns.tolist()}")
+    print(f"Head del dataset preprocesado:\n{main_df.head()}")
 
 
 def reindex_customer_product(group, all_dates):
@@ -209,7 +201,26 @@ def dataframe_reindexer(df):
     return weekly_df
 
 
-def lagged_features(**kwargs):
+def feature_lagger(df):
+    """
+    Agrega características rezagadas (lagged features) al dataframe proporcionado.
+    """
+
+    df = df.sort_values(by=["customer_id", "product_id", "purchase_date"])
+
+    # Definir los lags a crear
+    lag_weeks = [1, 2, 3, 4]
+    for lag in lag_weeks:
+        df[f"num_orders_lag_{lag}"] = df.groupby(["customer_id", "product_id"])["num_orders"].shift(lag).copy()
+        df[f"items_lag_{lag}"] = df.groupby(["customer_id", "product_id"])["items"].shift(lag).copy()
+
+    # Eliminar columnas sin lags, ya que son data leaks
+    df = df.drop(columns=["num_orders", "items"])
+
+    return df
+
+
+def training_lagged_features(**kwargs):
     """
     Agrega características rezagadas (lagged features) a los datos preprocesados.
     """
@@ -224,16 +235,9 @@ def lagged_features(**kwargs):
 
     # Leer el dataset preprocesado
     df = pd.read_parquet(os.path.join(preprocessed_folder, "weekly_data.parquet"))
-    df = df.sort_values(by=["customer_id", "product_id", "purchase_date"])
 
-    # Definir los lags a crear
-    lag_weeks = [1, 2, 3, 4]
-    for lag in lag_weeks:
-        df[f"num_orders_lag_{lag}"] = df.groupby(["customer_id", "product_id"])["num_orders"].shift(lag).copy()
-        df[f"items_lag_{lag}"] = df.groupby(["customer_id", "product_id"])["items"].shift(lag).copy()
-
-    # Eliminar columnas sin lags, ya que son data leaks
-    df = df.drop(columns=["num_orders", "items"])
+    # Crear lagged features
+    df = feature_lagger(df)
 
     # Guardado de datos con lags
     output_path = os.path.join(feature_extracted_folder, "weekly_data_with_lags.parquet")
@@ -275,3 +279,46 @@ def split_data(**kwargs):
     val_df.to_parquet(os.path.join(splits_folder, "val.parquet"), index=False)
     test_df.to_parquet(os.path.join(splits_folder, "test.parquet"), index=False)
     print(f"Conjuntos guardados en: {os.path.abspath(splits_folder)}")
+
+
+def next_week_data(**kwargs):
+    """
+    Genera y guarda los datos para la semana siguiente.
+    """
+    # Obtener fecha desde Airflow (si se pasa como contexto)
+    execution_date = kwargs.get("ds")
+
+    # Definir rutas de entrada y salida
+    base_folder = execution_date
+    preprocessed_folder = os.path.join(base_folder, "preprocessed")
+    feature_extracted_folder = os.path.join(base_folder, "feature_extracted")
+    os.makedirs(feature_extracted_folder, exist_ok=True)
+
+    # Leer el dataset preprocesado
+    main_df = pd.read_parquet(os.path.join(preprocessed_folder, "weekly_data.parquet"))
+    main_df = main_df.sort_values(by=["customer_id", "product_id", "purchase_date"])
+
+    # Crear filas para los pares customer-product para la semana siguiente
+    last_date = main_df["purchase_date"].max()
+    next_week_date = last_date + pd.Timedelta(weeks=1)
+
+    def create_next_week_rows(group):
+        last_row = group.iloc[-1]
+        new_row = last_row.copy()
+        new_row["purchase_date"] = next_week_date
+        new_row["items"] = 0
+        new_row["num_orders"] = 0
+        return pd.DataFrame([new_row])
+
+    next_week_df = main_df.groupby(["customer_id", "product_id"], group_keys=False).apply(create_next_week_rows)
+    main_df = pd.concat([main_df, next_week_df], ignore_index=True)
+
+    # Crear lagged features
+    main_df = feature_lagger(main_df)
+
+    # Filtrar solo la semana siguiente
+    next_week_data = main_df[main_df["purchase_date"] == next_week_date]
+
+    # Guardado de datos con lags para la semana siguiente
+    output_path = os.path.join(feature_extracted_folder, "next_week_data.parquet")
+    next_week_data.to_parquet(output_path, index=False)

@@ -1,53 +1,40 @@
 # Python encargado de orquestar el proceso ETL (Extract, Transform, Load)
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from airflow.operators.bash import BashOperator
 from airflow.operators.empty import EmptyOperator
 from datetime import datetime
-from etl_functions import create_folders, transform_data, split_data, lagged_features
-from airflow.dags.model_functions import optimize_model
+from etl_functions import split_data, training_lagged_features
+from model_functions import optimize_model
+
 
 # Definición del DAG
 with DAG(
-    dag_id="data_etl",
-    start_date=datetime(2024, 10, 1),
-    schedule_interval=None,  # ejecución manual
-    catchup=False,  # sin backfill
+    dag_id="model_training",
+    start_date=datetime(2025, 10, 14),
+    schedule_interval="0 13 * * 1",  # cada lunes a las 1:00 PM
+    catchup=True,
 ) as dag:
+    """
+    DAG para el entrenamiento y optimización del modelo de machine learning.
+    Este DAG está programado para ejecutarse una hora después del DAG de tratamiento de datos,
+    asegurando que los datos preprocesados estén disponibles para el entrenamiento del modelo.
+    """
 
     # 1. Marcador de inicio del pipeline
     start_pipeline = EmptyOperator(task_id="start_pipeline")
 
-    # 2. Crear carpetas de ejecución
-    create_folders_task = PythonOperator(task_id="create_folders", python_callable=create_folders, provide_context=True)
-
-    # 3. "Descargar datos históricos"
-    # (Simula producción, en realidad solo copia archivos locales de base_data a raw en cada ejecución)
-    download_data = BashOperator(
-        task_id="download_data",
-        bash_command="""
-            mkdir -p {{ ti.xcom_pull(task_ids='create_folders')['raw_data_path'] }} && \
-            cp $AIRFLOW_HOME/base_data/clientes.parquet \
-                {{ ti.xcom_pull(task_ids='create_folders')['raw_data_path'] }}/clientes.parquet && \
-            cp $AIRFLOW_HOME/base_data/productos.parquet \
-                {{ ti.xcom_pull(task_ids='create_folders')['raw_data_path'] }}/productos.parquet && \
-            cp $AIRFLOW_HOME/base_data/transacciones.parquet \
-                {{ ti.xcom_pull(task_ids='create_folders')['raw_data_path'] }}/transacciones.parquet
-    """,
-    )
-
-    # 4. Transformar y guardar datos semanalmente
-    transform_data = PythonOperator(task_id="transform_data", python_callable=transform_data, provide_context=True)
-
-    # 5. Crear lagged features y guardar datos
+    # 2. Crear lags y features adicionales
     feature_engineering = PythonOperator(
-        task_id="feature_engineering", python_callable=lagged_features, provide_context=True
+        task_id="feature_engineering", python_callable=training_lagged_features, provide_context=True
     )
 
-    # 6. Crear splits de entrenamiento, validación y prueba
+    # 3. Crear splits de entrenamiento, validación y prueba
     create_splits = PythonOperator(task_id="create_splits", python_callable=split_data, provide_context=True)
 
-    # 7. Model optimization
+    # 4. Model optimization
     model_optimization = PythonOperator(
         task_id="model_optimization", python_callable=optimize_model, provide_context=True
     )
+
+    # Definición del flujo de tareas
+    (start_pipeline >> feature_engineering >> create_splits >> model_optimization)
