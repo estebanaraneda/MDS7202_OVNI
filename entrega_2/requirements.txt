@@ -5,5 +5,10 @@ scikit-learn
 joblib
 gradio
 pyarrow
-xgboost
+xgboost==2.1.4
 optuna
+mlflow
+plotly
+kaleido
+shap
+matplotlib

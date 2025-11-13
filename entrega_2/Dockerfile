@@ -14,8 +14,19 @@ ENV AIRFLOW__CORE__LOAD_EXAMPLES=False
 RUN apt-get update && apt-get install -y \
     libgomp1 \
     curl \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    libnss3 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libgbm1 \
+    libxkbcommon0 \
+    libpango-1.0-0 \
+    libcairo2 \
+    libasound2 \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Actualizar pip
 RUN python -m pip install --upgrade pip
@@ -23,6 +34,9 @@ RUN python -m pip install --upgrade pip
 # Instala Apache Airflow y otras librerías
 COPY requirements.txt .
 RUN pip install -r requirements.txt
+
+# Descargar Chrome interno de Kaleido (liviano y aislado)
+RUN python -c "import kaleido; kaleido.get_chrome_sync()"
 
 # Inicializa la base de datos de Airflow
 RUN airflow db migrate
