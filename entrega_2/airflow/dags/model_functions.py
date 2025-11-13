@@ -8,7 +8,7 @@ from constants import CATEGORICAL_VARIABLES, NUMERICAL_VARIABLES, TEMPORAL_VARIA
 from sklearn.base import BaseEstimator, TransformerMixin
 from xgboost import XGBClassifier
 import optuna
-from joblib import dump
+from joblib import dump, load
 
 
 class OutlierClipper(BaseEstimator, TransformerMixin):
@@ -185,7 +185,7 @@ def model_predictor(**kwargs):
 
     # Cargar el modelo entrenado
     model_path = os.path.join(models_folder, "best_pipeline.joblib")
-    trained_pipeline = pd.read_parquet(model_path)
+    trained_pipeline = load(model_path)
 
     # Realizar predicciones
     predictions = trained_pipeline.predict(next_week_df)
