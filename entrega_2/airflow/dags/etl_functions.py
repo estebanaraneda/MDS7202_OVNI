@@ -123,6 +123,7 @@ def transform_data(fast_debug=True, only_last_week=False, last_week_path=None, *
     print(f"Dimensiones del dataset preprocesado: {main_df.shape}")
     print(f"Columnas del dataset preprocesado: {main_df.columns.tolist()}")
     print(f"Head del dataset preprocesado:\n{main_df.head()}")
+    print(f"Maxima fecha en el dataset preprocesado: {main_df['purchase_date'].max()}")
 
 
 def reindex_customer_product(group, all_dates):
@@ -157,7 +158,7 @@ def dataframe_reindexer(df):
     # Resampleo semanal
     weekly_df = (
         df.groupby(["customer_id", "product_id"])
-        .resample("W-MON")
+        .resample("W-MON", label="left", closed="left")
         .agg(
             {
                 "order_id": "nunique",  # Número de órdenes
