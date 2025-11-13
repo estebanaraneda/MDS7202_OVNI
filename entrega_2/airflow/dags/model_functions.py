@@ -165,3 +165,32 @@ def optimize_model(**kwargs):
     model_path = os.path.join(models_folder, "best_pipeline.joblib")
 
     dump(best_pipeline, model_path)
+
+
+def model_predictor(**kwargs):
+    """
+    Función para cargar el modelo entrenado y realizar predicciones en los datos de la semana siguiente.
+    """
+    # Obtener la fecha desde Airflow o usar la actual
+    execution_date = kwargs.get("ds")
+
+    # Definir rutas
+    base_folder = execution_date
+    feature_extracted_folder = os.path.join(base_folder, "feature_extracted")
+    models_folder = os.path.join(base_folder, "models")
+    predictions_folder = os.path.join(base_folder, "predictions")
+
+    # Leer dataset de la semana siguiente con lags
+    next_week_df = pd.read_parquet(os.path.join(feature_extracted_folder, "next_week_data.parquet"))
+
+    # Cargar el modelo entrenado
+    model_path = os.path.join(models_folder, "best_pipeline.joblib")
+    trained_pipeline = pd.read_parquet(model_path)
+
+    # Realizar predicciones
+    predictions = trained_pipeline.predict(next_week_df)
+
+    # Guardar predicciones
+    next_week_df["predictions"] = predictions
+    output_path = os.path.join(predictions_folder, "predictions_next_week.parquet")
+    next_week_df.to_parquet(output_path, index=False)
