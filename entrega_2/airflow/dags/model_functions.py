@@ -171,26 +171,6 @@ def optimize_model(**kwargs):
     study = optuna.create_study(direction="maximize")
     study.optimize(objective, n_trials=5)
 
-    # print("Número de ensayos realizados:", len(study.trials))
-    # print("Mejor valor de recall en validación:", study.best_value)
-    # print("Mejores hiperparámetros:", study.best_params)
-
-    # # Obtener el mejor pipeline entrenado
-    # best_pipeline = study.best_trial.user_attrs["best_pipeline"]
-
-    # # Evaluar en el conjunto de prueba
-    # y_test_pred = best_pipeline.predict(X_test)
-    # test_recall = (y_test_pred[y_test == 1] == 1).mean()
-    # print("Recall en conjunto de prueba:", test_recall)
-
-    # # Guardar el mejor pipeline entrenado
-    # base_folder = execution_date
-    # models_folder = os.path.join(base_folder, "models")
-    # os.makedirs(models_folder, exist_ok=True)
-    # model_path = os.path.join(models_folder, "best_pipeline.joblib")
-
-    # dump(best_pipeline, model_path)
-
     # # # Inicio bloque MLflow # # #
 
     # Logueo de los mejores hiperparámetros en MLflow
