@@ -60,13 +60,21 @@ def home():
 
 @app.post("/prediction/")
 def trigger_dag_run():
-    endpoint = f"{AIRFLOW_URL}/dags/{DAG_ID}/dagRuns"
-    data = {"conf": {"key": "value"}}  # Optional DAG run config
-    response = requests.post(endpoint, json=data, auth=HTTPBasicAuth(USERNAME, PASSWORD))
-    if response.status_code == 200 or response.status_code == 201:
-        return f"DAG {DAG_ID} triggered successfully!"
-    else:
-        return f"Error triggering DAG: {response.text}"
+    dag_id="model_predictor"
+    url = f"{AIRFLOW_URL}/api/v1/dags/{dag_id}/dagRuns"
+    payload = {
+        "dag_run_id": f"manual__{dag_id}__{{{{ ts_nodash }}}}",
+        "conf": {"source": "gradio-ui"},   # let Airflow use execution_date = now
+        "note": "Triggered from Gradio UI"}
+    try:
+        response = requests.post(
+            url,
+            json=payload,
+            auth=(AIRFLOW_USERNAME, AIRFLOW_PASSWORD)
+        )
+        return f"Status {response.status_code}: {response.text}"
+    except Exception as e:
+        return str(e)
 
 
 # Ejecutar con uvicorn
