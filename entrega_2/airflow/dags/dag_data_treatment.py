@@ -12,9 +12,9 @@ import logging
 # Definición del DAG
 with DAG(
     dag_id="data_treatment",
-    start_date=datetime(2025, 10, 14),
+    start_date=datetime(2025, 11, 10),
     schedule_interval="0 12 * * 1",  # cada lunes a las 12:00 PM
-    catchup=True,
+    catchup=False,
     max_active_runs=1,
     tags=["data_treatment", "etl", "weekly_pipeline"],
 ) as dag:

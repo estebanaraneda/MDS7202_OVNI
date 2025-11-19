@@ -10,9 +10,9 @@ from model_functions import model_predictor
 # Definición del DAG
 with DAG(
     dag_id="model_predictor",
-    start_date=datetime(2025, 10, 14),
+    start_date=datetime(2025, 11, 10),
     schedule_interval="0 14 * * 1",  # cada lunes a las 2:00 PM
-    catchup=True,
+    catchup=False,
 ) as dag:
     """
     DAG para el entrenamiento y optimización del modelo de machine learning.
