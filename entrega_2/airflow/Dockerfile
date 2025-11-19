@@ -49,10 +49,10 @@ RUN airflow users create --role Admin --username admin --email admin \
  --firstname admin --lastname admin --password admin
 
 # Copia las carpetas necesarias al contenedor
-COPY ./airflow/dags $AIRFLOW_HOME/dags
-COPY ./airflow/logs $AIRFLOW_HOME/logs
-COPY ./airflow/plugins $AIRFLOW_HOME/plugins
-COPY ./airflow/base_data $AIRFLOW_HOME/base_data
+COPY ./dags $AIRFLOW_HOME/dags
+COPY ./logs $AIRFLOW_HOME/logs
+COPY ./plugins $AIRFLOW_HOME/plugins
+COPY ./base_data $AIRFLOW_HOME/base_data
 
 # Comando para iniciar el servidor web y el scheduler
 CMD ["airflow", "standalone"]
