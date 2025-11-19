@@ -24,4 +24,4 @@ RUN airflow users create --role Admin --username admin --email admin \
 VOLUME ["/base_data"]
 
 CMD ["airflow", "standalone"]
-CMD ["python", "main.py"]
+#CMD ["python", "main.py"]
