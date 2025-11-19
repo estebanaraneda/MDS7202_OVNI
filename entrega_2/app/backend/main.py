@@ -7,26 +7,11 @@ import uvicorn
 
 # Definir estructura de input
 
-
-class WaterSample(BaseModel):
-    ph: float
-    Hardness: float
-    Solids: float
-    Chloramines: float
-    Sulfate: float
-    Conductivity: float
-    Organic_carbon: float
-    Trihalomethanes: float
-    Turbidity: float
-
-
-# Cargar el modelo
-
 # Crear la app
 
 app = FastAPI(
     title="Predicción de compra",
-    description="API para predecir si comportamiento de compra de bebidas",
+    description="API para predecir el comportamiento de compra de bebidas",
     version="1.0",
 )
 
@@ -39,31 +24,19 @@ def home():
     # Retornar información básica sobre la API
     # Formato de input y output
     return {
-        "message": "Modelo de clasificación de potabilidad de agua",
-        "input": {
-            "ph": "float",
-            "Hardness": "float",
-            "Solids": "float",
-            "Chloramines": "float",
-            "Sulfate": "float",
-            "Conductivity": "float",
-            "Organic_carbon": "float",
-            "Trihalomethanes": "float",
-            "Turbidity": "float",
-        },
-        "output": {"Potable": "0 = No potable, 1 = Potable"},
-    }
+        "message": "Modelo de predicción de compra bebestibles",
+        "input": {"algo": "float"}, "output": {"Preddiccion"}}
 
 
 # Ruta POST /potabilidad/
 
 
 @app.post("/prediction/")
-def trigger_dag_run():
+def trigger_dag_run(data: InputData):
     dag_id="model_predictor"
     url = f"{AIRFLOW_URL}/api/v1/dags/{dag_id}/dagRuns"
     payload = {
-        "dag_run_id": f"manual__{dag_id}__{{{{ ts_nodash }}}}",
+        "dag_run_id": f"manual__{dag_id}",
         "conf": {"source": "gradio-ui"},   # let Airflow use execution_date = now
         "note": "Triggered from Gradio UI"}
     try:
