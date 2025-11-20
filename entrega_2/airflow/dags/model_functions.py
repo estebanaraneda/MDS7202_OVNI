@@ -51,14 +51,16 @@ def split_reading_data(execution_date):  # Definir rutas
     val_df = pd.read_parquet(os.path.join(splits_folder, "val.parquet"))
     test_df = pd.read_parquet(os.path.join(splits_folder, "test.parquet"))
 
-    # Definir variable objetivo
+    # Definir variable objetivo y columnas ID
     target_col = "order"
+    id_cols = ["customer_id", "product_id"]
 
-    X_train = train_df.drop(columns=[target_col])
+    # Drop columnas ID y separar X e y
+    X_train = train_df.drop(columns=[target_col] + id_cols)
     y_train = train_df[target_col]
-    X_val = val_df.drop(columns=[target_col])
+    X_val = val_df.drop(columns=[target_col] + id_cols)
     y_val = val_df[target_col]
-    X_test = test_df.drop(columns=[target_col])
+    X_test = test_df.drop(columns=[target_col] + id_cols)
     y_test = test_df[target_col]
 
     return X_train, y_train, X_val, y_val, X_test, y_test
@@ -159,6 +161,9 @@ def optimize_model(**kwargs):
 
     execution_date = kwargs.get("ds")
     X_train, y_train, X_val, y_val, X_test, y_test = split_reading_data(execution_date)
+
+    # print de columnas
+    print("Columnas de X_train:", X_train.columns.tolist())
 
     # # # Inicio bloque MLflow # # #
 
