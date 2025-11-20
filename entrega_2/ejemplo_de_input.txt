@@ -1,0 +1,22 @@
+{
+  "purchase_date": "2024-10-14 00:00:00",
+  "customer_type": "ABARROTES",
+  "num_deliver_per_week": "2",
+  "brand": "Brand 3",
+  "segment": "MEDIUM",
+  "package": "BOTELLA",
+  "Y": -46.548024,
+  "X":-107.909634,
+  "size": 1.0,
+  "items_lag_1": 5,
+  "items_lag_2": 4,
+  "items_lag_3": 3,
+  "items_lag_4": 2,
+  "num_orders_lag_1": 10,
+  "num_orders_lag_2": 8,
+  "num_orders_lag_3": 6,
+  "num_orders_lag_4": 4,
+  "day": 15,
+  "month": 11,
+  "week": 46
+}
