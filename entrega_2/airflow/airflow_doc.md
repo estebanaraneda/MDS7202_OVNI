@@ -72,7 +72,7 @@ graph TD
 
 El siguiente es un ejemplo de cómo se visualiza el DAG en la interfaz de Airflow:
 
-![Representación del DAG en Airflow](ruta/a/imagen_dag_airflow.png)
+![Representación del DAG en Airflow](imagen_dag.png)
 
 ## Diseño para Integrar Futuros Datos y Reentrenar el Modelo
 
