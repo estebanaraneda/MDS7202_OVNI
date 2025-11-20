@@ -26,3 +26,6 @@ project/informe/*
 # Pero permitir estos dos archivos
 !project/informe/main.tex
 !project/informe/rapportECL2024.cls
+
+# Permitir imagen dag
+!entrega_2/airflow/imagen_dag.png
