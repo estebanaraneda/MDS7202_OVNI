@@ -179,6 +179,38 @@ def dataframe_reindexer(df):
     weekly_df.rename(columns={"order_id": "num_orders"}, inplace=True)
     weekly_df["purchase_date"] = pd.to_datetime(weekly_df["purchase_date"], utc=True)
 
+    # Se crean las tuplas cliente-producto que no existen en el resampleo
+    new_df = []
+    for customer_id in weekly_df["customer_id"].unique():
+        customer_df = weekly_df[weekly_df["customer_id"] == customer_id]
+        for product_id in weekly_df["product_id"].unique():
+            product_df = weekly_df[weekly_df["product_id"] == product_id]
+            product_customer_df = customer_df[customer_df["product_id"] == product_id]
+            if product_customer_df.empty:
+
+                first_date = weekly_df["purchase_date"].min()
+
+                new_df.append(
+                    {
+                        "customer_id": customer_id,
+                        "product_id": product_id,
+                        "purchase_date": first_date,
+                        "num_orders": 0,
+                        "items": 0,
+                        "customer_type": customer_df["customer_type"].iloc[0],
+                        "Y": customer_df["Y"].iloc[0],
+                        "X": customer_df["X"].iloc[0],
+                        "num_deliver_per_week": customer_df["num_deliver_per_week"].iloc[0],
+                        "brand": product_df["brand"].iloc[0],
+                        "segment": product_df["segment"].iloc[0],
+                        "package": product_df["package"].iloc[0],
+                        "size": product_df["size"].iloc[0],
+                    }
+                )
+
+    new_df = pd.DataFrame(new_df)
+    weekly_df = pd.concat([weekly_df, new_df], ignore_index=True)
+
     # Todas las fechas que deben existir
     all_dates = pd.date_range(
         start=weekly_df["purchase_date"].min(), end=weekly_df["purchase_date"].max(), freq="W-MON"
