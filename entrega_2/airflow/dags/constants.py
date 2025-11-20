@@ -3,8 +3,6 @@
 SEED = 42
 
 CATEGORICAL_VARIABLES = [
-    "customer_id",
-    "product_id",
     "customer_type",
     "num_deliver_per_week",
     "brand",
