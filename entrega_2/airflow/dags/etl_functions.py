@@ -33,7 +33,7 @@ def create_folders(**kwargs):
     }
 
 
-def transform_data(fast_debug=True, only_last_week=False, last_week_path=None, **kwargs):
+def transform_data(fast_debug=False, only_last_week=False, last_week_path=None, **kwargs):
     """
     Realiza las transformaciones necesarias en los datos para el modelo de recomendación.
 
