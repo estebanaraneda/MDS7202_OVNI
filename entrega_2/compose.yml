@@ -1,0 +1,38 @@
+version: "3.9"
+
+services:
+
+  airflow:
+    build: ./airflow
+    container_name: airflow
+    ports:
+      - "8080:8080"
+    volumes:
+      - model_store:/root/airflow/models   # Airflow escribe modelos
+    environment:
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////root/airflow/airflow.db
+    restart: always
+
+  backend:
+    build:
+      context: .
+      dockerfile: ./app/backend/Dockerfile
+    container_name: backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - model_store:/models                # backend lee modelos
+    depends_on:
+      - airflow
+
+  frontend:
+    build: ./app/frontend
+    container_name: frontend
+    ports:
+      - "7860:7860"
+    depends_on:
+      - backend
+
+volumes:
+  model_store:

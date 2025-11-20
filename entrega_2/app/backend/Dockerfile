@@ -1,27 +1,18 @@
-# Utiliza una imagen base con Python instalado
 FROM python:3.10-slim
-
-# Establece el directorio de trabajo en el contenedor
 
 WORKDIR /app
 
-COPY requirements.txt .
+# Copia los archivos de backend
+COPY app/backend/ .
 
-RUN pip install --upgrade pip
+# Instala las dependencias
+RUN pip install --no-cache-dir -r requirements.txt
 
-RUN pip install  -r requirements.txt
-
-COPY  main.py .
-COPY  dags .
-COPY  models .
-
-RUN airflow db migrate
-
+# Copia archivos necesarios para el modelo
+COPY airflow/dags/model_functions.py /app/
+COPY airflow/dags/constants.py /app/
+# Expone el puerto para FastAPI
 EXPOSE 8000
-RUN airflow users create --role Admin --username admin --email admin \
- --firstname admin --lastname admin --password admin
- 
-VOLUME ["/base_data"]
 
-CMD ["airflow", "standalone"]
-#CMD ["python", "main.py"]
+# Arranca FastAPI
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

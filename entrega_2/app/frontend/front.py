@@ -1,45 +1,43 @@
-# frontend/app.py
-
 import gradio as gr
 import requests
+import json
 
-BACKEND_URL = "http://backend:8000/prediction"
-AIRFLOW_USERNAME = "admin"
-AIRFLOW_PASSWORD = "admin"
+BACKEND_URL = "http://backend:8000/predict"
 
-def predict(text):
+
+def predict_from_json(input_json: str):
+    """
+    Recibe un JSON completo como texto.
+    Lo envía directamente al backend.
+    """
+
+    # Validar JSON
     try:
-        response = requests.post(BACKEND_URL, json={"text": text})
-        return response.json()
+        payload = json.loads(input_json)
+    except json.JSONDecodeError:
+        return "❌ Error: El texto ingresado no es un JSON válido."
+
+    # Llamar al backend
+    try:
+        response = requests.post(BACKEND_URL, json=payload)
     except Exception as e:
-        return {"error": str(e)}
+        return f"❌ Error de conexión con backend: {e}"
 
-    
-with gr.Blocks(title="Predicción + Airflow Trigger") as ui:
-    gr.Markdown("# Predicción de compra")
-    
-    with gr.Row():
-    #    with gr.Column(scale=1):
-    #        gr.Markdown("## 1. Modelo de predicción")
-    #        input_text = gr.Textbox(label="Texto de entrada", lines=3)
-    #        predict_btn = gr.Button("Predecir")
-    #        prediction_output = gr.JSON(label="Resultado predicción")
-            
-        with gr.Column(scale=1):
-            gr.Markdown("Activar la predicción")
-            trigger_btn = gr.Button("Activar DAG", variant="primary")
-            trigger_output = gr.Textbox(label="Resultado")
-    with gr.Row():
-            gr.Textbox(
-            value='''Esta interfás ocupa el botón de "activar la predicción" para iniciar la predicción de los datos. Y lo devuelve en la sección de resultados.
-            ''',
-            label="Instrucciones de uso",
-            interactive=False,
-            lines=3
-            )
+    # Verificar respuesta
+    if response.status_code != 200:
+        return f"❌ Error del backend: {response.text}"
 
-    #predict_btn.click(predict, inputs=input_text, outputs=prediction_output)
-    trigger_btn.click(predict, inputs=None, outputs=trigger_output)
+    return json.dumps(response.json(), indent=2, ensure_ascii=False)
+
+
+# -------- GRADIO UI --------
+iface = gr.Interface(
+    fn=predict_from_json,
+    inputs=gr.Textbox(label="JSON de entrada", lines=20, placeholder="Pegue aquí el JSON de la predicción"),
+    outputs=gr.Textbox(label="Respuesta del backend", lines=20),
+    title="Frontend de Predicción",
+    description="Pegue un JSON completo con todas las variables.",
+)
 
 if __name__ == "__main__":
-    ui.launch(server_name="0.0.0.0", server_port=7860)
+    iface.launch(server_name="0.0.0.0", server_port=7860)
