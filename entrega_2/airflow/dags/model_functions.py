@@ -267,5 +267,6 @@ def model_predictor(**kwargs):
 
     # Guardar predicciones
     next_week_df["predictions"] = predictions
-    output_path = os.path.join(predictions_folder, "predictions_next_week.parquet")
-    next_week_df.to_parquet(output_path, index=False)
+    next_week_df = next_week_df[["customer_id", "product_id", "predictions"]]
+    output_path = os.path.join(predictions_folder, "predictions_next_week.csv")
+    next_week_df.to_csv(output_path, index=False)
