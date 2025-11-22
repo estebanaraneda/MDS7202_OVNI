@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+from constants import BASE_AIRFLOW_FOLDERS
 
 # Archivo encargado de definir funciones ETL reutilizables para los DAGs de Airflow
 
@@ -7,7 +8,8 @@ import pandas as pd
 def create_folders(**kwargs):
     """
     Crea una carpeta con la fecha de ejecución (proveniente del DAG)
-    y tres subcarpetas: 'raw', 'splits' y 'models'.
+    y dentro de ella crea las subcarpetas necesarias para el pipeline ETL:
+    'raw', 'preprocessed', 'feature_extracted', 'splits', 'models', 'predictions'.
 
     Parameters:
         **kwargs: Recibe los parámetros del contexto de Airflow.
@@ -26,6 +28,7 @@ def create_folders(**kwargs):
         os.makedirs(os.path.join(base_folder, sub), exist_ok=True)
 
     print(f"Carpetas creadas en: {os.path.abspath(base_folder)}")
+
     return {
         "raw_data_path": os.path.abspath(os.path.join(base_folder, "raw")),
         "splits_path": os.path.abspath(os.path.join(base_folder, "splits")),
@@ -33,7 +36,35 @@ def create_folders(**kwargs):
     }
 
 
-def transform_data(fast_debug=True, only_last_week=False, last_week_path=None, **kwargs):
+def check_old_execution(home_folder, **kwargs):
+    """
+    Verifica si existe una ejecución pasada en la carpeta home_folder.
+    Retorna la ruta de la última ejecución si existe, de lo contrario None.
+    """
+    execution_date = kwargs.get("ds")
+    current_execution_folder = os.path.join(home_folder, execution_date)
+
+    # Carpetas con excepción
+    excluded_folders = BASE_AIRFLOW_FOLDERS.copy()
+    excluded_folders.append(os.path.basename(current_execution_folder))
+
+    # Listar todas las carpetas en home_folder
+    all_folders = [
+        f for f in os.listdir(home_folder) if os.path.isdir(os.path.join(home_folder, f)) and f not in excluded_folders
+    ]
+
+    if not all_folders:
+        return None
+
+    # Encontrar la última fecha de ejecución
+    all_folders.sort()
+    last_execution_folder = all_folders[-1]
+    last_execution_path = os.path.join(home_folder, last_execution_folder)
+
+    return last_execution_path
+
+
+def transform_data(home_folder, fast_debug=True, **kwargs):
     """
     Realiza las transformaciones necesarias en los datos para el modelo de recomendación.
 
@@ -46,15 +77,35 @@ def transform_data(fast_debug=True, only_last_week=False, last_week_path=None, *
     client_path = os.path.join(base_folder, "raw", "clientes.parquet")
     product_path = os.path.join(base_folder, "raw", "productos.parquet")
 
-    if only_last_week:
-        transaction_path = os.path.join(base_folder, "raw", "new_transactions.parquet")
+    # Obtenemos todos los nombres de archivo de transacciones nuevas de la carpeta new_transactions
+    new_transactions_folder = os.path.join(base_folder, "raw", "new_transactions")
+    new_transaction_files = [
+        os.path.join(new_transactions_folder, f) for f in os.listdir(new_transactions_folder) if f.endswith(".parquet")
+    ]
+
+    new_transactions = []
+    for file in new_transaction_files:
+        df = pd.read_parquet(file)
+        new_transactions.append(df)
+    new_transactions = pd.concat(new_transactions, ignore_index=True)
+
+    last_execution_path = None
+    if check_old_execution(home_folder, **kwargs) is not None:
+        print("Ejecución pasada encontrada. Usando datos de la última ejecución.")
+        last_execution_path = os.path.join(
+            check_old_execution(home_folder, **kwargs), "preprocessed", "weekly_data.parquet"
+        )
+        transactions = new_transactions
+
     else:
-        transaction_path = os.path.join(base_folder, "raw", "transacciones.parquet")
+        print("No se encontró ejecución pasada. Usando datos base completos.")
+        base_transaction_path = os.path.join(base_folder, "raw", "transacciones.parquet")
+        base_transactions = pd.read_parquet(base_transaction_path)
+        transactions = pd.concat([base_transactions, new_transactions], ignore_index=True)
 
     # Lectura de datos
     clients = pd.read_parquet(client_path)
     products = pd.read_parquet(product_path)
-    transactions = pd.read_parquet(transaction_path)
 
     # Drop de duplicados
     clients = clients.drop_duplicates(keep="first")
@@ -104,11 +155,11 @@ def transform_data(fast_debug=True, only_last_week=False, last_week_path=None, *
     main_df["customer_id"] = main_df["customer_id"].astype("category")
     main_df["product_id"] = main_df["product_id"].astype("category")
 
-    print(f"last_week_path: {last_week_path}")
-    # Merge con datos de la semana pasada si es necesario
-    if only_last_week and last_week_path is not None:
-        last_week_df = pd.read_parquet(last_week_path)
-        main_df = pd.concat([last_week_df, main_df], ignore_index=True)
+    print(f"last_execution_path: {last_execution_path}")
+    # Merge con datos de la ejecución pasada si es necesario
+    if last_execution_path is not None:
+        last_execution_df = pd.read_parquet(last_execution_path)
+        main_df = pd.concat([last_execution_df, main_df], ignore_index=True)
         main_df = main_df.drop_duplicates(keep="last", subset=["customer_id", "product_id", "purchase_date"])
 
     # Guardado de datos transformados semanalmente
