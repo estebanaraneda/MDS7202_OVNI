@@ -270,3 +270,8 @@ def model_predictor(**kwargs):
     next_week_df = next_week_df[["customer_id", "product_id", "predictions"]]
     output_path = os.path.join(predictions_folder, "predictions_next_week.csv")
     next_week_df.to_csv(output_path, index=False)
+
+    # Guardar predicciones en formato codabench
+    next_week_positive = next_week_df[next_week_df["predictions"] == 1][["customer_id", "product_id"]]
+    codabench_output_path = os.path.join(predictions_folder, "predictions_next_week_codabench.csv")
+    next_week_positive.to_csv(codabench_output_path, index=False)
