@@ -64,7 +64,7 @@ def check_old_execution(home_folder, **kwargs):
     return last_execution_path
 
 
-def transform_data(home_folder, fast_debug=True, **kwargs):
+def transform_data(home_folder, fast_debug=False, **kwargs):
     """
     Realiza las transformaciones necesarias en los datos para el modelo de recomendación.
 
@@ -79,16 +79,23 @@ def transform_data(home_folder, fast_debug=True, **kwargs):
 
     # Obtenemos todos los nombres de archivo de transacciones nuevas de la carpeta new_transactions
     new_transactions_folder = os.path.join(base_folder, "raw", "new_transactions")
+    print(f"Buscando archivos de nuevas transacciones en: {new_transactions_folder}")
     new_transaction_files = [
         os.path.join(new_transactions_folder, f) for f in os.listdir(new_transactions_folder) if f.endswith(".parquet")
     ]
 
+    print(f"Archivos de nuevas transacciones encontrados: {new_transaction_files}")
     new_transactions = []
     for file in new_transaction_files:
         df = pd.read_parquet(file)
         new_transactions.append(df)
-    new_transactions = pd.concat(new_transactions, ignore_index=True)
 
+    if len(new_transactions) == 0:
+        new_transactions = pd.DataFrame(columns=["customer_id", "product_id", "order_id", "purchase_date", "items"])
+    else:
+        new_transactions = pd.concat(new_transactions, ignore_index=True)
+
+    print(f"Nuevas transacciones cargadas: {new_transactions.shape}")
     last_execution_path = None
     if check_old_execution(home_folder, **kwargs) is not None:
         print("Ejecución pasada encontrada. Usando datos de la última ejecución.")
@@ -230,37 +237,37 @@ def dataframe_reindexer(df):
     weekly_df.rename(columns={"order_id": "num_orders"}, inplace=True)
     weekly_df["purchase_date"] = pd.to_datetime(weekly_df["purchase_date"], utc=True)
 
-    # Se crean las tuplas cliente-producto que no existen en el resampleo
-    new_df = []
-    for customer_id in weekly_df["customer_id"].unique():
-        customer_df = weekly_df[weekly_df["customer_id"] == customer_id]
-        for product_id in weekly_df["product_id"].unique():
-            product_df = weekly_df[weekly_df["product_id"] == product_id]
-            product_customer_df = customer_df[customer_df["product_id"] == product_id]
-            if product_customer_df.empty:
+    # # Se crean las tuplas cliente-producto que no existen en el resampleo
+    # new_df = []
+    # for customer_id in weekly_df["customer_id"].unique():
+    #     customer_df = weekly_df[weekly_df["customer_id"] == customer_id]
+    #     for product_id in weekly_df["product_id"].unique():
+    #         product_df = weekly_df[weekly_df["product_id"] == product_id]
+    #         product_customer_df = customer_df[customer_df["product_id"] == product_id]
+    #         if product_customer_df.empty:
 
-                first_date = weekly_df["purchase_date"].min()
+    #             first_date = weekly_df["purchase_date"].min()
 
-                new_df.append(
-                    {
-                        "customer_id": customer_id,
-                        "product_id": product_id,
-                        "purchase_date": first_date,
-                        "num_orders": 0,
-                        "items": 0,
-                        "customer_type": customer_df["customer_type"].iloc[0],
-                        "Y": customer_df["Y"].iloc[0],
-                        "X": customer_df["X"].iloc[0],
-                        "num_deliver_per_week": customer_df["num_deliver_per_week"].iloc[0],
-                        "brand": product_df["brand"].iloc[0],
-                        "segment": product_df["segment"].iloc[0],
-                        "package": product_df["package"].iloc[0],
-                        "size": product_df["size"].iloc[0],
-                    }
-                )
+    #             new_df.append(
+    #                 {
+    #                     "customer_id": customer_id,
+    #                     "product_id": product_id,
+    #                     "purchase_date": first_date,
+    #                     "num_orders": 0,
+    #                     "items": 0,
+    #                     "customer_type": customer_df["customer_type"].iloc[0],
+    #                     "Y": customer_df["Y"].iloc[0],
+    #                     "X": customer_df["X"].iloc[0],
+    #                     "num_deliver_per_week": customer_df["num_deliver_per_week"].iloc[0],
+    #                     "brand": product_df["brand"].iloc[0],
+    #                     "segment": product_df["segment"].iloc[0],
+    #                     "package": product_df["package"].iloc[0],
+    #                     "size": product_df["size"].iloc[0],
+    #                 }
+    #             )
 
-    new_df = pd.DataFrame(new_df)
-    weekly_df = pd.concat([weekly_df, new_df], ignore_index=True)
+    # new_df = pd.DataFrame(new_df)
+    # weekly_df = pd.concat([weekly_df, new_df], ignore_index=True)
 
     # Todas las fechas que deben existir
     all_dates = pd.date_range(
@@ -352,6 +359,9 @@ def split_data(**kwargs):
     # Definir fecha de corte para hold-out split (60/20/20)
     cutoff_date = initial_date + (final_date - initial_date) * 0.6
     test_cutoff_date = cutoff_date + (final_date - initial_date) * 0.2
+
+    # Muestra de 50% para evitar problemas de memoria en el entrenamiento
+    df = df.sample(frac=0.5, random_state=42)
 
     # Dividir los datos
     train_df = df[df["purchase_date"] <= cutoff_date]

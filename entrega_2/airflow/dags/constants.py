@@ -31,9 +31,4 @@ TEMPORAL_VARIABLES = [
 ]
 
 
-BASE_AIRFLOW_FOLDERS = [
-    "dags",
-    "base_data",
-    "logs",
-    "plugins",
-]
+BASE_AIRFLOW_FOLDERS = ["dags", "base_data", "logs", "plugins", "models"]

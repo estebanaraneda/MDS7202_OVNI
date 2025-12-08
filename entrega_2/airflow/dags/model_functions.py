@@ -174,7 +174,7 @@ def optimize_model(**kwargs):
     # # # Fin bloque MLflow # # #
 
     study = optuna.create_study(direction="maximize")
-    study.optimize(objective, n_trials=5)
+    study.optimize(objective, n_trials=20)
 
     # # # Inicio bloque MLflow # # #
 
@@ -273,5 +273,7 @@ def model_predictor(**kwargs):
 
     # Guardar predicciones en formato codabench
     next_week_positive = next_week_df[next_week_df["predictions"] == 1][["customer_id", "product_id"]]
+    # df a enteros
+    next_week_positive = next_week_positive.astype(int)
     codabench_output_path = os.path.join(predictions_folder, "predictions_next_week_codabench.csv")
-    next_week_positive.to_csv(codabench_output_path, index=False)
+    next_week_positive.to_csv(codabench_output_path, index=False, header=False)
