@@ -29,3 +29,6 @@ TEMPORAL_VARIABLES = [
     "month",
     "week",
 ]
+
+
+BASE_AIRFLOW_FOLDERS = ["dags", "base_data", "logs", "plugins", "models"]

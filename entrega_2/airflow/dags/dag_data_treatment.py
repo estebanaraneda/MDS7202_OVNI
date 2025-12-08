@@ -6,8 +6,6 @@ from airflow.operators.empty import EmptyOperator
 from datetime import datetime
 from etl_functions import create_folders, transform_data
 import os
-from airflow.operators.python import BranchPythonOperator
-import logging
 
 # Definición del DAG
 with DAG(
@@ -42,56 +40,23 @@ with DAG(
 
     # 4. "Descargar datos nuevos"
     # (Simula producción, en realidad solo copia archivos locales de new_data a raw en cada ejecución)
+    # Mueve la carpeta entera base_data/new_transactions/ a la carpeta raw del día de ejecución
     download_new_data = BashOperator(
         task_id="download_new_data",
         bash_command="""
-            cp $AIRFLOW_HOME/base_data/new_transactions.parquet \
-                {{ ti.xcom_pull(task_ids='create_folders')['raw_data_path'] }}/new_transactions.parquet
-    """,
+            cp -r $AIRFLOW_HOME/base_data/new_transactions/ \
+                {{ ti.xcom_pull(task_ids='create_folders')['raw_data_path'] }}/new_transactions
+        """,
     )
 
-    # 4. Preprocesamos todos los datos disponibles o utilizamos los datos preprocesados hasta la semana pasada
-    # y solo preprocesamos los datos nuevos si es que existen.
-    last_week_preprocessed_path = "{{ macros.ds_add(ds, -7) }}/preprocessed/weekly_data.parquet"
+    home_folder = os.environ["AIRFLOW_HOME"]
 
-    def choose_branch(last_week_preprocessed_path=None):
-        logger = logging.getLogger("airflow.task")
-        logger.info("Verificando si existe el archivo de la semana pasada...")
-        logger.info(f"Ruta: {last_week_preprocessed_path}")
-        # Si existe el archivo de la semana pasada significa que ya existen datos preprocesados
-        # Por lo que no es necesario realizar el preprocesamiento entero de nuevo.
-        if os.path.exists(last_week_preprocessed_path):
-            return "preprocess_from_last_week"
-        else:
-            return "preprocess_full"
-
-    branch_task = BranchPythonOperator(
-        task_id="branch_task",
-        python_callable=choose_branch,
-        dag=dag,
-        op_kwargs={"last_week_preprocessed_path": last_week_preprocessed_path},
-    )
-
-    preprocess_full = PythonOperator(
-        task_id="preprocess_full",
+    preprocess_from_last_execution = PythonOperator(
+        task_id="preprocess_data",
         python_callable=transform_data,
-        op_kwargs={"only_last_week": False},
-        provide_context=True,
-    )
-
-    preprocess_from_last_week = PythonOperator(
-        task_id="preprocess_from_last_week",
-        python_callable=transform_data,
-        op_kwargs={"only_last_week": True, "last_week_path": last_week_preprocessed_path},
+        op_kwargs={"home_folder": home_folder},
         provide_context=True,
     )
 
     # Definición de la secuencia de tareas
-    (
-        start_pipeline
-        >> create_folders_task
-        >> download_data
-        >> download_new_data
-        >> branch_task
-        >> [preprocess_full, preprocess_from_last_week]
-    )
+    (start_pipeline >> create_folders_task >> download_data >> download_new_data >> preprocess_from_last_execution)
